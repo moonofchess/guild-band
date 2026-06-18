@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>멸망한 세계에서 용병단으로 살아남기 (다크 판타지 에디션)</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Noto+Sans+KR:wght@300;400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Canvas for rendering combat/sprites -->
+        <canvas id="game-canvas" width="1280" height="720"></canvas>
+
+        <!-- In-game Toast Notification -->
+        <div id="game-toast" class="hidden"></div>
+
+        <!-- Main UI Overlay -->
+        <div id="ui-layer">
+            <header class="top-bar">
+                <div class="top-bar-left">
+                    <div class="day-indicator">📅 <span id="res-day">1</span>일째</div>
+                </div>
+                <div class="top-bar-right">
+                    <div class="resource"><img src="assets/icon_gold.png" class="res-icon" alt="Gold"> <span id="res-gold">500</span></div>
+                    <div class="resource"><img src="assets/icon_ration.png" class="res-icon" alt="Ration"> <span id="res-rations">60</span></div>
+                    <div class="resource"><img src="assets/icon_loot.png" class="res-icon" alt="Loot"> <span id="res-loot">0</span></div>
+                </div>
+            </header>
+            
+            <!-- Main Content Area -->
+            <main id="scene-content">
+                <!-- Base Camp Screen -->
+                <div id="camp-screen" class="screen">
+                    <div class="camp-header">
+                        <h1 class="title" id="camp-title">버려진 산성</h1>
+                        <p class="subtitle" id="camp-subtitle">멸망한 제국 외곽의 폐성채. 비가 새고 쥐가 들끓는 거처입니다.</p>
+                    </div>
+
+                    <!-- Facility Navigation -->
+                    <div class="menu-grid">
+                        <button class="menu-btn" onclick="switchTab('lordhall')">🏛️ 영주실 (관리/업그레이드)</button>
+                        <button class="menu-btn" onclick="switchTab('magicarray')">🌀 마법 통신진 (용병 영입)</button>
+                        <button class="menu-btn" onclick="switchTab('blacksmith')">⚒️ 대장간 (장비 강화)</button>
+                        <button class="menu-btn" onclick="switchTab('tavern')">🍺 여관/주점 (사기 충전)</button>
+                        <button class="menu-btn" onclick="switchTab('sanctum')">⛪ 치유의 성소 (부상/정화)</button>
+                        <button class="menu-btn highlight-btn" onclick="switchTab('expedition')">⚔️ 깊은 마의 구역 (토벌 시작)</button>
+                    </div>
+
+                    <!-- Mercenary Guild List (Bottom) -->
+                    <section class="guild-panel">
+                        <h2>👥 우리 용병단 단원 목록 (<span id="merc-count">0</span> / <span id="merc-max">4</span>)</h2>
+                        <div class="merc-list" id="guild-merc-list">
+                            <!-- Merc cards injected dynamically -->
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Tab Contents (Popups/Overlays) -->
+                <div id="tab-overlay" class="overlay hidden">
+                    <div class="popup">
+                        <button class="close-btn" onclick="closeOverlay()">✖</button>
+                        
+                        <!-- 1. Lord's Hall Tab -->
+                        <div id="tab-lordhall" class="tab-pane hidden">
+                            <h2>🏛️ 영주실 (작전 회의실)</h2>
+                            <p class="tab-desc">거처의 시설들을 정비하고 업그레이드합니다.</p>
+                            <div class="upgrade-list">
+                                <div class="upgrade-item">
+                                    <div>
+                                        <h3>영주실 (용병 수용량 및 분대 크기 확장)</h3>
+                                        <p>현재 레벨: <span id="lvl-lordhall">1</span> / 3</p>
+                                    </div>
+                                    <button class="action-btn" onclick="upgradeFacility('lordhall')">업그레이드 (💰200, 🦴10)</button>
+                                </div>
+                                <div class="upgrade-item">
+                                    <div>
+                                        <h3>마법 통신진 (고성능 신호 감지)</h3>
+                                        <p>현재 레벨: <span id="lvl-magicarray">1</span> / 3</p>
+                                    </div>
+                                    <button class="action-btn" onclick="upgradeFacility('magicarray')">업그레이드 (💰150, 🦴10)</button>
+                                </div>
+                                <div class="upgrade-item">
+                                    <div>
+                                        <h3>대장간 (장비 담금질 한계 확장)</h3>
+                                        <p>현재 레벨: <span id="lvl-blacksmith">1</span> / 3</p>
+                                    </div>
+                                    <button class="action-btn" onclick="upgradeFacility('blacksmith')">업그레이드 (💰150, 🦴15)</button>
+                                </div>
+                                <div class="upgrade-item">
+                                    <div>
+                                        <h3>여관/주점 (사기 충전 증가)</h3>
+                                        <p>현재 레벨: <span id="lvl-tavern">1</span> / 3</p>
+                                    </div>
+                                    <button class="action-btn" onclick="upgradeFacility('tavern')">업그레이드 (💰100, 🦴8)</button>
+                                </div>
+                                <div class="upgrade-item">
+                                    <div>
+                                        <h3>치유의 성소 (치료 비용 절감)</h3>
+                                        <p>현재 레벨: <span id="lvl-sanctum">1</span> / 3</p>
+                                    </div>
+                                    <button class="action-btn" onclick="upgradeFacility('sanctum')">업그레이드 (💰150, 🦴15)</button>
+                                </div>
+                            </div>
+                            <div class="bottom-actions">
+                                <button class="action-btn next-day-btn" onclick="nextDay()">🔔 하루 보내기 (유지비 소모)</button>
+                            </div>
+                        </div>
+
+                        <!-- 2. Magic Array Tab (Recruitment) -->
+                        <div id="tab-magicarray" class="tab-pane hidden">
+                            <h2>🌀 마법 통신진 (차원 연동)</h2>
+                            <p class="tab-desc">마력 조율 신호를 보내 생존 용병을 유도합니다.</p>
+                            <div class="recruit-actions">
+                                <button class="action-btn" onclick="rollRecruits()">신호 탐색 가동 (💰 40골드 소모)</button>
+                            </div>
+                            <div class="recruits-grid" id="recruits-pool-list">
+                                <!-- Potential recruits injected dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- 3. Blacksmith Tab (Upgrade Gear) -->
+                        <div id="tab-blacksmith" class="tab-pane hidden">
+                            <h2>⚒️ 대장간 (대장장이 무기고)</h2>
+                            <p class="tab-desc">용병들의 무기와 방어구를 강화하여 공격력과 방어력을 보강합니다.</p>
+                            <div class="blacksmith-grid" id="blacksmith-merc-list">
+                                <!-- Mercenary upgrade cards injected dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- 4. Tavern Tab (Rest morale) -->
+                        <div id="tab-tavern" class="tab-pane hidden">
+                            <h2>🍺 여관 / 주점 (왁자지껄한 모닥불)</h2>
+                            <p class="tab-desc">피로와 괴물들의 공포로 지친 용병들의 멘탈을 케어합니다.</p>
+                            <div class="tavern-grid" id="tavern-merc-list">
+                                <!-- Tavern rest options injected dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- 5. Sanctum Tab (Heal / Purify) -->
+                        <div id="tab-sanctum" class="tab-pane hidden">
+                            <h2>⛪ 치유의 성소 (여신상 기도진)</h2>
+                            <p class="tab-desc">전투에서 입은 치명적인 부상을 치료하고, 마기 오염(타락도)을 정화합니다.</p>
+                            <div class="sanctum-grid" id="sanctum-merc-list">
+                                <!-- Sanctum purify/treatment cards injected dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- 6. Expedition Tab (Choose stage) -->
+                        <div id="tab-expedition" class="tab-pane hidden">
+                            <h2>⚔️ 토벌지 침투 작전 수립</h2>
+                            <p class="tab-desc">탐색 및 사냥을 진행할 오염된 구역을 선택하고 출전할 용병단을 편성합니다.</p>
+                            <div class="expedition-layout">
+                                <div class="stages-list">
+                                    <h3>📍 토벌지 선택</h3>
+                                    <div class="stage-card active" onclick="selectStage(this, 'forest')">
+                                        <h4>오염된 숲 (난이도: 하)</h4>
+                                        <p>마수로 인해 꼬인 나무 숲. 마주칠 적: 고블린 무리</p>
+                                    </div>
+                                    <div class="stage-card" onclick="selectStage(this, 'ruins')">
+                                        <h4>멸망한 제국 도시 (난이도: 중)</h4>
+                                        <p>무너진 돌더미 잔해. 마주칠 적: 고블린, 오염된 스켈레톤</p>
+                                    </div>
+                                    <div class="stage-card" onclick="selectStage(this, 'dungeon')">
+                                        <h4>고대 던전/지하묘지 (난이도: 상)</h4>
+                                        <p>횃불 켜진 지하 돌벽. 마주칠 적: 타락한 이단심문관, 살점 골렘</p>
+                                    </div>
+                                </div>
+                                <div class="squad-selection">
+                                    <h3>🛡️ 전투 분대 편성 (최대 <span id="squad-limit">3</span>명)</h3>
+                                    <div class="squad-setup" id="squad-setup-list">
+                                        <!-- Selected members slots -->
+                                    </div>
+                                    <button class="action-btn start-expedition-btn" onclick="beginBattle()">⚔️ 토벌 시작</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Combat Overlay UI -->
+                <div id="combat-overlay" class="screen hidden">
+                    <div class="combat-header">
+                        <div class="cp-indicator">
+                            <img src="assets/icon_cp.png" class="res-icon" alt="CP">
+                            <span id="combat-cp">5</span> / 10 CP
+                        </div>
+                        <div class="turn-indicator" id="combat-turn-text">TURN 1</div>
+                    </div>
+
+                    <!-- Battle Log Console (Left) -->
+                    <div id="battle-log-console">
+                        <div class="log-entries" id="battle-log-entries"></div>
+                    </div>
+
+                    <!-- Combat Controls Overlay (Bottom) -->
+                    <div id="combat-controls-panel">
+                        <!-- Left Panel: Selected Mercenary Details -->
+                        <div id="active-merc-info">
+                            <div class="active-merc-portrait" id="active-merc-p-img"></div>
+                            <div class="active-merc-details">
+                                <h3 id="active-merc-name">용병 이름</h3>
+                                <p id="active-merc-class">직업</p>
+                                <p>AP: <span id="active-merc-ap">3/3</span> | MP: <span id="active-merc-mp">30/30</span></p>
+                            </div>
+                        </div>
+
+                        <!-- Mid Panel: Actions / Skills Grid -->
+                        <div id="combat-actions-grid">
+                            <button class="combat-btn" id="btn-normal-attack" onclick="combatAction('attack')">⚔️ 일반 공격 (AP 1)</button>
+                            <button class="combat-btn" id="btn-class-skill" onclick="combatAction('skill')">🔥 직업 스킬 (AP 2)</button>
+                            <button class="combat-btn" id="btn-leader-skills" onclick="toggleLeaderSkills()">📢 단장 지휘 (CP 소모)</button>
+                            <button class="combat-btn" id="btn-end-turn" onclick="combatAction('end-turn')">🔔 턴 종료</button>
+                            <button class="combat-btn retreat-btn" onclick="combatAction('retreat')">🏃 도망치기 (50%)</button>
+                        </div>
+
+                        <!-- Right Panel: Switch active mercenary -->
+                        <div id="ally-switch-panel"></div>
+                    </div>
+
+                    <!-- Popup for Leader Skills -->
+                    <div id="leader-skills-overlay" class="hidden">
+                        <div class="leader-popup">
+                            <h3>📢 단장 지휘 스킬 (턴당 1회)</h3>
+                            <div class="leader-skills-list">
+                                <button class="action-btn" onclick="useLeaderSkill('strike')">🎯 일제 사격 명령 (CP 3) - 전체 타격 1.5배</button>
+                                <button class="action-btn" onclick="useLeaderSkill('buff')">🌟 사기 진작 (CP 2) - 전체 사기+20, AP+2</button>
+                                <button class="action-btn" onclick="useLeaderSkill('stun')">💫 마력 간섭 (CP 4) - 적 전체 1턴 기절</button>
+                                <button class="action-btn close-leader" onclick="toggleLeaderSkills()">취소</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Event Notification Popup -->
+                <div id="event-overlay" class="overlay hidden">
+                    <div class="popup event-popup">
+                        <h2 id="event-title">이벤트 제목</h2>
+                        <div id="event-content" class="event-content">이벤트 내용</div>
+                        <div id="event-actions" class="event-actions">
+                            <!-- Event choices injected dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <script type="module" src="main.js"></script>
+</body>
+</html>
