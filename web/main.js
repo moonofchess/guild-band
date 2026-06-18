@@ -819,62 +819,65 @@ window.combatAction = (action) => {
 
 function promptTargetSelect(promptText, onSelect) {
     addCombatLog(`🎯 [지정 요망] ${promptText}`, "system");
+
+    const targets = [];
     activeBattle.enemySprites.forEach((s, idx) => {
         if (s.data.isAlive()) {
             s.isSelected = true;
-            // Listen to click coordinates or simplify by adding DOM overlays.
-            // Let's use Canvas Coordinates click check!
-            canvasClickPromise((x, y) => {
-                const dx = x - s.x;
-                const dy = y - s.y;
-                if (Math.abs(dx) < 60 && Math.abs(dy) < 60) {
-                    clearSelectors();
-                    onSelect(idx);
-                    return true; // Click handled
-                }
-                return false;
-            });
+            targets.push({ sprite: s, idx });
         }
     });
+
+    registerCanvasClick(targets, onSelect);
 }
 
 function promptAllySelect(promptText, onSelect) {
     addCombatLog(`🎯 [아군 지정 요망] ${promptText}`, "system");
+
+    const targets = [];
     activeBattle.allySprites.forEach((s, idx) => {
         if (s.data.hp > 0) {
             s.isSelected = true;
-            canvasClickPromise((x, y) => {
-                const dx = x - s.x;
-                const dy = y - s.y;
-                if (Math.abs(dx) < 60 && Math.abs(dy) < 60) {
-                    clearSelectors();
-                    onSelect(idx);
-                    return true;
-                }
-                return false;
-            });
+            targets.push({ sprite: s, idx });
         }
     });
+
+    registerCanvasClick(targets, onSelect);
 }
 
 let canvasClickHandler = null;
-function canvasClickPromise(checkFn) {
+
+// Single unified handler — checks ALL targets in one click event
+function registerCanvasClick(targets, onSelect) {
     const canvas = document.getElementById("game-canvas");
-    
-    // Clear old handler
+
     if (canvasClickHandler) {
         canvas.removeEventListener("mousedown", canvasClickHandler);
+        canvasClickHandler = null;
     }
 
     canvasClickHandler = (e) => {
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        if (checkFn(x, y)) {
-            canvas.removeEventListener("mousedown", canvasClickHandler);
-            canvasClickHandler = null;
+        // Scale mouse coords to match canvas pixel space (handles CSS scaling)
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const x = (e.clientX - rect.left) * scaleX;
+        const y = (e.clientY - rect.top) * scaleY;
+
+        for (const { sprite, idx } of targets) {
+            const dx = x - sprite.x;
+            const dy = y - sprite.y;
+            // Generous hitbox: 80×90 pixels
+            if (Math.abs(dx) < 80 && Math.abs(dy) < 90) {
+                canvas.removeEventListener("mousedown", canvasClickHandler);
+                canvasClickHandler = null;
+                clearSelectors();
+                onSelect(idx);
+                return;
+            }
         }
     };
+
     canvas.addEventListener("mousedown", canvasClickHandler);
 }
 
