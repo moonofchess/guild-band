@@ -684,11 +684,11 @@ window.beginBattle = () => {
         return engine.spawnSprite(`assets/${m.assetName}`, x, y, 1.2, false, m);
     });
 
-    // Enemy positions (Right side)
+    // Enemy positions (Right side — kept clear of log panel on far right)
     activeBattle.enemySprites = activeBattle.enemies.map((e, i) => {
-        const x = 900 - (i % 2 === 0 ? 0 : 80);
+        const x = 820 - (i % 2 === 0 ? 0 : 70);
         const y = 300 + i * 110;
-        return engine.spawnSprite(`assets/${e.sheet}`, x, y, -e.scale, true, e); // Negative scale flips horizontally
+        return engine.spawnSprite(`assets/${e.sheet}`, x, y, -e.scale, true, e);
     });
 
     addCombatLog("⚔️ 토벌 구역 침투 성공! 전투가 시작되었습니다.", "system");

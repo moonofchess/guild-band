@@ -570,9 +570,10 @@ body {
 #battle-log-console {
     position: absolute;
     top: 90px;
-    left: 20px;
-    width: 380px;
-    height: 380px;
+    right: 20px;
+    left: auto;
+    width: 290px;
+    height: 370px;
     background: rgba(10, 10, 15, 0.85);
     border: 1px solid var(--border-gold-dim);
     border-radius: 6px;
