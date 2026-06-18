@@ -10,6 +10,21 @@ const mercenaries = [
     new Mercenary("실비아", "사제", "F")
 ];
 
+// Class emoji mapping (portrait fallback)
+const CLASS_EMOJI = {
+    '전사': '⚔️', '척후병': '🗡️', '마법사': '🔥', '사제': '✨',
+};
+function setPortraitFallback(el, mClass, portraitFile) {
+    if (!portraitFile) { el.textContent = CLASS_EMOJI[mClass] || '👤'; return; }
+    const img = new Image();
+    img.onload = () => {
+        el.style.backgroundImage = `url('assets/${portraitFile}')`;
+        el.textContent = '';
+    };
+    img.onerror = () => { el.textContent = CLASS_EMOJI[mClass] || '👤'; };
+    img.src = `assets/${portraitFile}`;
+}
+
 // Active expedition configurations
 let selectedStage = 'forest';
 let selectedSquad = []; // list of mercenary indexes
@@ -43,9 +58,25 @@ function updateTopBar() {
     document.getElementById("res-loot").innerText = resources.monsterLoot;
 }
 
+const BG_GRADIENTS = {
+    lordhall:   'linear-gradient(160deg, #0e0c1a 0%, #1a1530 50%, #0a0810 100%)',
+    magicarray: 'linear-gradient(160deg, #070a1a 0%, #0d1535 50%, #1a0a2a 100%)',
+    blacksmith: 'linear-gradient(160deg, #140c05 0%, #2a1a08 50%, #0f0a04 100%)',
+    tavern:     'linear-gradient(160deg, #140a05 0%, #2a1808 50%, #1a1005 100%)',
+    sanctum:    'linear-gradient(160deg, #0a0e14 0%, #101828 50%, #0a1418 100%)',
+    expedition: 'linear-gradient(160deg, #0a0d05 0%, #1a1e08 50%, #0a0d05 100%)',
+    camp_ruined:   'linear-gradient(160deg, #0d0a18 0%, #13101f 40%, #0a0a10 100%)',
+    camp_restored: 'linear-gradient(160deg, #0d1018 0%, #131820 40%, #0a0e10 100%)',
+};
+
 function updateCampBackground() {
+    const key = camp.lordHallLevel === 1 ? 'camp_ruined' : 'camp_restored';
     const bgFile = camp.lordHallLevel === 1 ? 'bg_base_ruined.png' : 'bg_base_restored.png';
-    document.getElementById("game-container").style.background = `url('assets/${bgFile}') center/cover no-repeat`;
+    const container = document.getElementById("game-container");
+    const img = new Image();
+    img.onload = () => { container.style.background = `url('assets/${bgFile}') center/cover no-repeat`; };
+    img.onerror = () => { container.style.background = BG_GRADIENTS[key]; };
+    img.src = `assets/${bgFile}`;
 }
 
 function renderGuildList() {
@@ -67,7 +98,7 @@ function renderGuildList() {
         const card = document.createElement("div");
         card.className = "merc-card";
         card.innerHTML = `
-            <div class="merc-portrait" style="background-image: url('assets/${m.portrait}')"></div>
+            <div class="merc-portrait" data-portrait="${m.portrait}" data-class="${m.mClass}"></div>
             <div class="merc-info">
                 <div class="merc-name-row">
                     <span class="merc-name">${m.name} (${m.mClass})</span>
@@ -83,6 +114,8 @@ function renderGuildList() {
             </div>
         `;
         listDiv.appendChild(card);
+        // Apply portrait with fallback after DOM insertion
+        setPortraitFallback(card.querySelector('.merc-portrait'), m.mClass, m.portrait);
     });
 }
 
@@ -100,28 +133,27 @@ window.switchTab = (tab) => {
     if (activePane) activePane.classList.remove("hidden");
 
     // Dynamic background changes when entering tabs
+    const TAB_BG = {
+        lordhall:  { file: 'bg_hall.png',         key: 'lordhall' },
+        magicarray:{ file: 'bg_magic_array.png',   key: 'magicarray' },
+        blacksmith:{ file: 'bg_blacksmith.png',    key: 'blacksmith' },
+        tavern:    { file: 'bg_tavern.png',         key: 'tavern' },
+        sanctum:   { file: 'bg_sanctum.png',        key: 'sanctum' },
+        expedition:{ file: 'bg_event_campfire.png', key: 'expedition' },
+    };
     const container = document.getElementById("game-container");
-    if (tab === 'lordhall') container.style.background = "url('assets/bg_hall.png') center/cover no-repeat";
-    if (tab === 'magicarray') {
-        container.style.background = "url('assets/bg_magic_array.png') center/cover no-repeat";
-        renderRecruitTab();
+    if (TAB_BG[tab]) {
+        const { file, key } = TAB_BG[tab];
+        const img = new Image();
+        img.onload = () => { container.style.background = `url('assets/${file}') center/cover no-repeat`; };
+        img.onerror = () => { container.style.background = BG_GRADIENTS[key] || BG_GRADIENTS['camp_ruined']; };
+        img.src = `assets/${file}`;
     }
-    if (tab === 'blacksmith') {
-        container.style.background = "url('assets/bg_blacksmith.png') center/cover no-repeat";
-        renderBlacksmithTab();
-    }
-    if (tab === 'tavern') {
-        container.style.background = "url('assets/bg_tavern.png') center/cover no-repeat";
-        renderTavernTab();
-    }
-    if (tab === 'sanctum') {
-        container.style.background = "url('assets/bg_sanctum.png') center/cover no-repeat";
-        renderSanctumTab();
-    }
-    if (tab === 'expedition') {
-        container.style.background = "url('assets/bg_event_campfire.png') center/cover no-repeat";
-        renderExpeditionTab();
-    }
+    if (tab === 'magicarray') renderRecruitTab();
+    if (tab === 'blacksmith') renderBlacksmithTab();
+    if (tab === 'tavern')     renderTavernTab();
+    if (tab === 'sanctum')    renderSanctumTab();
+    if (tab === 'expedition') renderExpeditionTab();
 };
 
 window.closeOverlay = () => {
@@ -272,7 +304,7 @@ function renderBlacksmithTab() {
         const card = document.createElement("div");
         card.className = "facility-card";
         card.innerHTML = `
-            <div class="merc-portrait" style="background-image: url('assets/${m.portrait}')"></div>
+            <div class="merc-portrait" data-portrait="${m.portrait}" data-class="${m.mClass}"></div>
             <div class="facility-card-info">
                 <div>
                     <h4>${m.name} (${m.mClass})</h4>
@@ -290,6 +322,7 @@ function renderBlacksmithTab() {
             </div>
         `;
         list.appendChild(card);
+        setPortraitFallback(card.querySelector('.merc-portrait'), m.mClass, m.portrait);
     });
 }
 
@@ -357,7 +390,7 @@ function renderTavernTab() {
         const card = document.createElement("div");
         card.className = "facility-card";
         card.innerHTML = `
-            <div class="merc-portrait" style="background-image: url('assets/${m.portrait}')"></div>
+            <div class="merc-portrait" data-portrait="${m.portrait}" data-class="${m.mClass}"></div>
             <div class="facility-card-info">
                 <div>
                     <h4>${m.name} (${m.mClass})</h4>
@@ -371,6 +404,7 @@ function renderTavernTab() {
             </div>
         `;
         list.appendChild(card);
+        setPortraitFallback(card.querySelector('.merc-portrait'), m.mClass, m.portrait);
     });
 }
 
@@ -411,7 +445,7 @@ function renderSanctumTab() {
         const card = document.createElement("div");
         card.className = "facility-card";
         card.innerHTML = `
-            <div class="merc-portrait" style="background-image: url('assets/${m.portrait}')"></div>
+            <div class="merc-portrait" data-portrait="${m.portrait}" data-class="${m.mClass}"></div>
             <div class="facility-card-info">
                 <div>
                     <h4>${m.name} (${m.mClass})</h4>
@@ -432,6 +466,7 @@ function renderSanctumTab() {
             </div>
         `;
         list.appendChild(card);
+        setPortraitFallback(card.querySelector('.merc-portrait'), m.mClass, m.portrait);
     });
 }
 
@@ -673,7 +708,7 @@ function updateCombatUI() {
         document.getElementById("active-merc-ap").innerText = `${activeMerc.currentAp} / ${activeMerc.maxAp}`;
         document.getElementById("active-merc-mp").innerText = `${activeMerc.mp} / ${activeMerc.maxMp}`;
         
-        document.getElementById("active-merc-p-img").style.backgroundImage = `url('assets/${activeMerc.portrait}')`;
+        setPortraitFallback(document.getElementById("active-merc-p-img"), activeMerc.mClass, activeMerc.portrait);
 
         const skillBtn = document.getElementById("btn-class-skill");
         if (activeMerc.mClass === '전사') skillBtn.innerText = "🛡️ 방패 충격 (AP 2)";

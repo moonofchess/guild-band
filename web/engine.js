@@ -73,9 +73,26 @@ export class GameEngine {
     draw() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Draw battle background if loaded
-        if (this.isCombat && this.bgImage.complete && this.bgImage.src) {
-            this.ctx.drawImage(this.bgImage, 0, 0, this.canvas.width, this.canvas.height);
+        if (this.isCombat) {
+            const bgLoaded = this.bgImage.complete && this.bgImage.naturalWidth > 0 && this.bgImage.src;
+            if (bgLoaded) {
+                this.ctx.drawImage(this.bgImage, 0, 0, this.canvas.width, this.canvas.height);
+            } else {
+                // Gradient fallback battle background
+                const grad = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+                grad.addColorStop(0,   '#0a0a14');
+                grad.addColorStop(0.5, '#12101e');
+                grad.addColorStop(1,   '#050508');
+                this.ctx.fillStyle = grad;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                // Ground line
+                this.ctx.strokeStyle = 'rgba(195,156,56,0.15)';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, this.canvas.height * 0.72);
+                this.ctx.lineTo(this.canvas.width, this.canvas.height * 0.72);
+                this.ctx.stroke();
+            }
         }
 
         if (this.isCombat) {
@@ -112,34 +129,62 @@ export class GameEngine {
     }
 }
 
+// Class color palette for placeholder rendering
+const CLASS_COLORS = {
+    '전사':   { bg: '#1a3a5c', border: '#4488cc', text: '#88ccff' },
+    '척후병': { bg: '#1a3d1a', border: '#44aa44', text: '#88ff88' },
+    '마법사': { bg: '#2d1a4a', border: '#9944cc', text: '#cc88ff' },
+    '사제':   { bg: '#3d3010', border: '#ccaa22', text: '#ffdd66' },
+    // Monsters
+    'goblin':     { bg: '#2a1a0a', border: '#cc5500', text: '#ff8844' },
+    'skeleton':   { bg: '#1e1e22', border: '#aaaacc', text: '#ddddff' },
+    'inquisitor': { bg: '#1a0505', border: '#cc1111', text: '#ff5555' },
+    'golem':      { bg: '#1a1205', border: '#886633', text: '#ccaa66' },
+    'default':    { bg: '#1a1a2e', border: '#555577', text: '#aaaacc' },
+};
+
+function getClassColors(data, isEnemy) {
+    if (!data) return CLASS_COLORS['default'];
+    if (!isEnemy && data.mClass) return CLASS_COLORS[data.mClass] || CLASS_COLORS['default'];
+    if (isEnemy && data.name) {
+        const n = data.name;
+        if (n.includes('고블린')) return CLASS_COLORS['goblin'];
+        if (n.includes('스켈레톤')) return CLASS_COLORS['skeleton'];
+        if (n.includes('이단심문관')) return CLASS_COLORS['inquisitor'];
+        if (n.includes('골렘')) return CLASS_COLORS['golem'];
+    }
+    return CLASS_COLORS['default'];
+}
+
 // 5-row Animation Sprite Sheet handler
 class CombatSprite {
     constructor(src, x, y, scale, isEnemy, data = null) {
         this.image = new Image();
-        this.image.src = src;
         this.x = x;
         this.y = y;
         this.scale = scale;
         this.isEnemy = isEnemy;
-        this.data = data; // Reference to Mercenary or Monster data
+        this.data = data;
         
         this.currentAnim = "idle";
         this.currentFrame = 0;
         this.frameTime = 0;
         this.fps = 8;
         
-        // Grid setup defaults (will recalculate on image load)
-        this.cols = 4; // default frames per row
-        this.rows = 5; // idle, move, attack, hit, death
+        this.cols = 4;
+        this.rows = 5;
         
         this.image.onload = () => {
             this.frameWidth = this.image.width / this.cols;
             this.frameHeight = this.image.height / this.rows;
         };
+        // Only set src after handler is registered
+        this.image.src = src;
 
-        // UI states
         this.isSelected = false;
         this.shakeTimer = 0;
+        // Fallback bob animation (when no sprite sheet)
+        this._bobTime = Math.random() * Math.PI * 2;
     }
 
     setAnimation(name) {
@@ -155,18 +200,20 @@ class CombatSprite {
     }
 
     update(dt) {
+        this._bobTime = (this._bobTime || 0) + dt * 0.003;
+
         this.frameTime += dt;
         let framesInRow = 4;
         if (this.currentAnim === "hit") framesInRow = 2;
-        if (this.currentAnim === "attack") framesInRow = 4; // or 6 depending on sheet
+        if (this.currentAnim === "attack") framesInRow = 4;
 
         if (this.frameTime > 1000 / this.fps) {
             this.currentFrame++;
             if (this.currentFrame >= framesInRow) {
                 if (this.currentAnim === "attack" || this.currentAnim === "hit") {
-                    this.setAnimation("idle"); // revert to idle
+                    this.setAnimation("idle");
                 } else if (this.currentAnim === "death") {
-                    this.currentFrame = framesInRow - 1; // stay on last frame
+                    this.currentFrame = framesInRow - 1;
                 } else {
                     this.currentFrame = 0;
                 }
@@ -174,48 +221,87 @@ class CombatSprite {
             this.frameTime = 0;
         }
 
-        if (this.shakeTimer > 0) {
-            this.shakeTimer -= dt;
+        if (this.shakeTimer > 0) this.shakeTimer -= dt;
+    }
+
+    _getSpriteSize() {
+        const s = Math.abs(this.scale);
+        if (this.frameWidth) {
+            return { w: this.frameWidth * s, h: this.frameHeight * s };
         }
+        return { w: 48 * s, h: 64 * s };
     }
 
     draw(ctx) {
-        if (!this.frameWidth) return;
-
-        let rowIdx = 0;
-        switch (this.currentAnim) {
-            case "idle": rowIdx = 0; break;
-            case "move": rowIdx = 1; break;
-            case "attack": rowIdx = 2; break;
-            case "hit": rowIdx = 3; break;
-            case "death": rowIdx = 4; break;
-        }
+        const s = Math.abs(this.scale);
+        let offsetX = this.shakeTimer > 0 ? (Math.random() - 0.5) * 10 : 0;
 
         ctx.save();
-        
-        // Shake logic
-        let offsetX = 0;
-        if (this.shakeTimer > 0) {
-            offsetX = (Math.random() - 0.5) * 10;
-        }
-
         ctx.translate(this.x + offsetX, this.y);
-        
-        // Flip enemies
-        if (this.isEnemy) {
-            ctx.scale(-1, 1);
-        }
+        if (this.isEnemy) ctx.scale(-1, 1);
 
-        const s = Math.abs(this.scale);
-        ctx.drawImage(
-            this.image,
-            this.currentFrame * this.frameWidth, rowIdx * this.frameHeight, this.frameWidth, this.frameHeight,
-            -(this.frameWidth * s) / 2, -(this.frameHeight * s) / 2, this.frameWidth * s, this.frameHeight * s
-        );
+        const hasSprite = this.frameWidth && this.image.complete && this.image.naturalWidth > 0;
+
+        if (hasSprite) {
+            // Sprite sheet rendering
+            let rowIdx = 0;
+            switch (this.currentAnim) {
+                case "idle":   rowIdx = 0; break;
+                case "move":   rowIdx = 1; break;
+                case "attack": rowIdx = 2; break;
+                case "hit":    rowIdx = 3; break;
+                case "death":  rowIdx = 4; break;
+            }
+            ctx.drawImage(
+                this.image,
+                this.currentFrame * this.frameWidth, rowIdx * this.frameHeight,
+                this.frameWidth, this.frameHeight,
+                -(this.frameWidth * s) / 2, -(this.frameHeight * s) / 2,
+                this.frameWidth * s, this.frameHeight * s
+            );
+        } else {
+            // ── Placeholder rendering (no sprite loaded) ──
+            const { w, h } = this._getSpriteSize();
+            const colors = getClassColors(this.data, this.isEnemy);
+
+            // Bob effect on idle
+            const bobY = this.currentAnim === 'attack' ? -4
+                       : this.currentAnim === 'hit'    ? 3
+                       : this.currentAnim === 'death'  ? h * 0.3
+                       : Math.sin(this._bobTime) * 3;
+
+            const alpha = this.currentAnim === 'death' ? 0.4 : 1.0;
+            ctx.globalAlpha = alpha;
+
+            // Body shape: rounded rect
+            ctx.fillStyle = colors.bg;
+            ctx.beginPath();
+            const rx = 6;
+            ctx.roundRect(-w/2, -h/2 + bobY, w, h, rx);
+            ctx.fill();
+
+            // Border (glow on attack)
+            ctx.strokeStyle = this.currentAnim === 'attack' ? '#ffffff' : colors.border;
+            ctx.lineWidth = this.currentAnim === 'attack' ? 3 : 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-w/2, -h/2 + bobY, w, h, rx);
+            ctx.stroke();
+
+            // Character icon / initial
+            const label = this.data?.name
+                ? (this.isEnemy ? this.data.name.substring(0, 2) : this.data.mClass || this.data.name[0])
+                : '?';
+            ctx.font = `bold ${Math.round(13 * s)}px 'Noto Sans KR', sans-serif`;
+            ctx.fillStyle = colors.text;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, 0, bobY);
+
+            ctx.globalAlpha = 1.0;
+        }
 
         ctx.restore();
 
-        // Draw HUD (HP/MP bars, Name, Selection cursor) above characters if alive
         if (this.data && this.data.hp > 0) {
             this.drawHUD(ctx);
         }
@@ -223,7 +309,8 @@ class CombatSprite {
 
     drawHUD(ctx) {
         const s = Math.abs(this.scale);
-        const hudY = this.y - (this.frameHeight * s) / 2 - 10;
+        const spriteH = this.frameHeight || 64;
+        const hudY = this.y - (spriteH * s) / 2 - 10;
         const hudW = 60;
         const hudX = this.x - hudW / 2;
 
