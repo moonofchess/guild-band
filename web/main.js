@@ -847,29 +847,35 @@ function promptAllySelect(promptText, onSelect) {
 
 let canvasClickHandler = null;
 
-// Single unified handler — checks ALL targets in one click event
+// Attach to combat-overlay (z-index 10) not the canvas (z-index 2)
+// — the overlay sits on top and intercepts all clicks in the battle area.
 function registerCanvasClick(targets, onSelect) {
     const canvas = document.getElementById("game-canvas");
+    // combat-overlay covers the whole screen at z-index 10 and receives all clicks
+    const hitArea = document.getElementById("combat-overlay");
 
     if (canvasClickHandler) {
-        canvas.removeEventListener("mousedown", canvasClickHandler);
+        hitArea.removeEventListener("mousedown", canvasClickHandler);
         canvasClickHandler = null;
     }
 
     canvasClickHandler = (e) => {
+        // Ignore clicks on UI panels (controls, log) — only handle canvas-area clicks
+        if (e.target.closest("#combat-controls-panel") ||
+            e.target.closest("#battle-log-console")) return;
+
         const rect = canvas.getBoundingClientRect();
-        // Scale mouse coords to match canvas pixel space (handles CSS scaling)
-        const scaleX = canvas.width / rect.width;
+        const scaleX = canvas.width  / rect.width;
         const scaleY = canvas.height / rect.height;
         const x = (e.clientX - rect.left) * scaleX;
-        const y = (e.clientY - rect.top) * scaleY;
+        const y = (e.clientY - rect.top)  * scaleY;
 
         for (const { sprite, idx } of targets) {
             const dx = x - sprite.x;
             const dy = y - sprite.y;
-            // Generous hitbox: 80×90 pixels
-            if (Math.abs(dx) < 80 && Math.abs(dy) < 90) {
-                canvas.removeEventListener("mousedown", canvasClickHandler);
+            // Generous hitbox: 90×100 pixels
+            if (Math.abs(dx) < 90 && Math.abs(dy) < 100) {
+                hitArea.removeEventListener("mousedown", canvasClickHandler);
                 canvasClickHandler = null;
                 clearSelectors();
                 onSelect(idx);
@@ -878,7 +884,7 @@ function registerCanvasClick(targets, onSelect) {
         }
     };
 
-    canvas.addEventListener("mousedown", canvasClickHandler);
+    hitArea.addEventListener("mousedown", canvasClickHandler);
 }
 
 function clearSelectors() {

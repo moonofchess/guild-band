@@ -295,6 +295,8 @@ class CombatSprite {
             ctx.fillStyle = colors.text;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
+            // Counter-flip the horizontal mirror for text so it reads normally
+            if (this.isEnemy) ctx.scale(-1, 1);
             ctx.fillText(label, 0, bobY);
 
             ctx.globalAlpha = 1.0;
