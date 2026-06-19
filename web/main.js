@@ -673,21 +673,22 @@ window.beginBattle = () => {
     // Initialize formations
     activeBattle.allies.forEach(m => {
         m.currentAp = m.maxAp;
+        m.hasActedThisTurn = false;
         activeBattle.formation[m.name] = (m.mClass === "전사" || m.mClass === "척후병") ? "전열" : "후열";
     });
 
     // Spawn Sprites on Canvas
-    // Ally positions (Left side)
+    // Ally positions (Left side) — keep above bottom control panel (y < 520)
     activeBattle.allySprites = activeBattle.allies.map((m, i) => {
-        const x = 200 + (activeBattle.formation[m.name] === "전열" ? 100 : 0);
-        const y = 320 + i * 110;
+        const x = activeBattle.formation[m.name] === "전열" ? 320 : 210;
+        const y = 220 + i * 100;
         return engine.spawnSprite(`assets/${m.assetName}`, x, y, 1.2, false, m);
     });
 
-    // Enemy positions (Right side — kept clear of log panel on far right)
+    // Enemy positions (Right side — clear of battle log on far right)
     activeBattle.enemySprites = activeBattle.enemies.map((e, i) => {
-        const x = 820 - (i % 2 === 0 ? 0 : 70);
-        const y = 300 + i * 110;
+        const x = 800 - (i % 2 === 0 ? 0 : 60);
+        const y = 220 + i * 100;
         return engine.spawnSprite(`assets/${e.sheet}`, x, y, -e.scale, true, e);
     });
 
@@ -722,10 +723,12 @@ function updateCombatUI() {
     switchPanel.innerHTML = "";
     activeBattle.allies.forEach((m, idx) => {
         const isDead = m.states.includes("출혈");
+        const acted = m.hasActedThisTurn;
         const btn = document.createElement("button");
-        btn.className = `ally-switch-btn${idx === activeBattle.activeAllyIdx ? ' active-ally' : ''}`;
+        btn.className = `ally-switch-btn${idx === activeBattle.activeAllyIdx ? ' active-ally' : ''}${acted ? ' ally-acted' : ''}`;
         btn.disabled = isDead;
-        btn.innerText = `${m.name} AP:${m.currentAp}/${m.maxAp}`;
+        btn.innerText = `${m.name} ${acted ? '✓' : `AP:${m.currentAp}`}`;
+        btn.title = acted ? '이번 라운드 행동 완료' : `AP: ${m.currentAp}/${m.maxAp}`;
         if (!isDead) btn.onclick = () => selectActiveMercenary(idx);
         switchPanel.appendChild(btn);
     });
@@ -776,8 +779,14 @@ window.combatAction = (action) => {
         return;
     }
 
+    // Each ally may act only once per round
+    if (activeMerc.hasActedThisTurn) {
+        showToast(`${activeMerc.name}은(는) 이번 라운드에 이미 행동했습니다.`, 'error');
+        return;
+    }
+
     if (activeMerc.currentAp <= 0) {
-        showToast("행동력(AP)이 부족합니다! 턴을 종료하거나 다른 용병을 선택하세요.", 'error');
+        showToast("행동력(AP)이 부족합니다!", 'error');
         return;
     }
 
@@ -897,6 +906,36 @@ function clearSelectors() {
     }
 }
 
+// Called after each player action — marks merc as done, auto-advances turn
+function afterPlayerAction(merc) {
+    merc.hasActedThisTurn = true;
+    checkBattleStatus();
+    if (!activeBattle) return; // battle ended
+    updateCombatUI();
+
+    setTimeout(() => {
+        if (!activeBattle) return;
+        const nextIdx = findNextUnactedAlly();
+        if (nextIdx !== -1) {
+            addCombatLog(`▶ ${activeBattle.allies[nextIdx].name}의 차례입니다.`, "system");
+            selectActiveMercenary(nextIdx);
+        } else {
+            addCombatLog("🔔 모든 아군 행동 완료 — 적의 반격!", "system");
+            executeEnemyTurn();
+        }
+    }, 700);
+}
+
+function findNextUnactedAlly() {
+    const n = activeBattle.allies.length;
+    for (let i = 1; i <= n; i++) {
+        const idx = (activeBattle.activeAllyIdx + i) % n;
+        const m = activeBattle.allies[idx];
+        if (m.hp > 0 && !m.states.includes("출혈") && !m.hasActedThisTurn) return idx;
+    }
+    return -1;
+}
+
 // 9. DAMAGE / ACTION EXECUTION DETAILS
 function executePlayerAttack(merc, enemyIdx) {
     const targetSprite = activeBattle.enemySprites[enemyIdx];
@@ -910,7 +949,7 @@ function executePlayerAttack(merc, enemyIdx) {
     const hitRate = merc.negativeTrait === "애꾸눈" ? 0.70 : 0.85;
     if (Math.random() > hitRate) {
         addCombatLog(`💨 ${merc.name}의 일반 일격이 허공을 갈랐습니다! (빗나감)`, "normal");
-        updateCombatUI();
+        afterPlayerAction(merc);
         return;
     }
 
@@ -933,8 +972,7 @@ function executePlayerAttack(merc, enemyIdx) {
         engine.spawnFloatingText(damageDealt + (isCrit ? " Crit!" : ""), targetSprite.x, targetSprite.y - 30, isCrit ? '#f1c40f' : '#ff5252');
         addCombatLog(`⚔️ ${merc.name}이(가) ${target.name}에게 ${damageDealt} 물리 피해를 줬습니다.`, "player");
 
-        checkBattleStatus();
-        updateCombatUI();
+        afterPlayerAction(merc);
     }, 200);
 }
 
@@ -965,8 +1003,7 @@ function executeWarriorSkill(merc, enemyIdx) {
             addCombatLog(`💫 ${target.name}이(가) 1턴간 [기절]했습니다!`, "system");
         }
 
-        checkBattleStatus();
-        updateCombatUI();
+        afterPlayerAction(merc);
     }, 200);
 }
 
@@ -994,8 +1031,7 @@ function executeScoutSkill(merc, enemyIdx) {
         engine.spawnFloatingText(damageDealt.toString(), targetSprite.x, targetSprite.y - 30, '#ff3333');
         addCombatLog(`🗡️ [급소 찌르기] ${merc.name}이(가) ${target.name}에게 방어구 관통 급소 찔러 ${damageDealt} 피해!`, "player");
 
-        checkBattleStatus();
-        updateCombatUI();
+        afterPlayerAction(merc);
     }, 200);
 }
 
@@ -1027,8 +1063,7 @@ function executeMageSkill(merc) {
         });
         addCombatLog("🔥 대폭발로 적군 전체가 화마의 격통에 휩싸입니다!", "player");
         
-        checkBattleStatus();
-        updateCombatUI();
+        afterPlayerAction(merc);
     });
 }
 
@@ -1055,7 +1090,7 @@ function executePriestSkill(merc, allyIdx) {
         engine.spawnFloatingText("+" + healAmt, targetSprite.x, targetSprite.y - 30, '#2ecc71');
         addCombatLog(`✨ [성스러운 치유] ${merc.name}이(가) ${target.name}에게 성광을 내뿜어 HP +${healAmt} 치유 및 해독!`, "player");
         
-        updateCombatUI();
+        afterPlayerAction(merc);
     }, 200);
 }
 
@@ -1236,11 +1271,12 @@ function executeEnemyTurn() {
             activeBattle.cp = Math.min(activeBattle.maxCp, activeBattle.cp + 2);
             activeBattle.leaderUsed = false;
             
-            // Restore AP
+            // Restore AP + reset action flag for new round
             activeBattle.allies.forEach(m => {
                 if (!m.states.includes("출혈")) {
                     m.currentAp = m.maxAp;
                 }
+                m.hasActedThisTurn = false;
             });
 
             addCombatLog(`◈ [턴 ${activeBattle.turn}] 당신의 명령 단계 ◈`, "system");
@@ -1323,10 +1359,10 @@ function handleBattleFinish(isWin, isRetreat = false) {
     activeBattle = null;
     engine.isCombat = false;
     
-    // Clear canvas events
-    const canvas = document.getElementById("game-canvas");
+    // Clear click handler (attached to combat-overlay)
+    const hitArea = document.getElementById("combat-overlay");
     if (canvasClickHandler) {
-        canvas.removeEventListener("mousedown", canvasClickHandler);
+        hitArea.removeEventListener("mousedown", canvasClickHandler);
         canvasClickHandler = null;
     }
 
