@@ -831,7 +831,7 @@ function promptTargetSelect(promptText, onSelect) {
 
     const targets = [];
     activeBattle.enemySprites.forEach((s, idx) => {
-        if (s.data.isAlive()) {
+        if (s.data.isAlive() && !s.hidden) {
             s.isSelected = true;
             targets.push({ sprite: s, idx });
         }
@@ -869,7 +869,7 @@ function registerCanvasClick(targets, onSelect) {
     }
 
     canvasClickHandler = (e) => {
-        // Ignore clicks on UI panels (controls, log) — only handle canvas-area clicks
+        // Ignore clicks on UI panels (controls, log)
         if (e.target.closest("#combat-controls-panel") ||
             e.target.closest("#battle-log-console")) return;
 
@@ -879,17 +879,26 @@ function registerCanvasClick(targets, onSelect) {
         const x = (e.clientX - rect.left) * scaleX;
         const y = (e.clientY - rect.top)  * scaleY;
 
+        // Pick the NEAREST target — avoids first-match errors when sprites are close
+        let best = null;
+        let bestDist = 100; // max click distance in px (not too large)
+
         for (const { sprite, idx } of targets) {
+            if (sprite.hidden) continue; // skip dead/hidden sprites
             const dx = x - sprite.x;
             const dy = y - sprite.y;
-            // Generous hitbox: 90×100 pixels
-            if (Math.abs(dx) < 90 && Math.abs(dy) < 100) {
-                hitArea.removeEventListener("mousedown", canvasClickHandler);
-                canvasClickHandler = null;
-                clearSelectors();
-                onSelect(idx);
-                return;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = { sprite, idx };
             }
+        }
+
+        if (best) {
+            hitArea.removeEventListener("mousedown", canvasClickHandler);
+            canvasClickHandler = null;
+            clearSelectors();
+            onSelect(best.idx);
         }
     };
 
@@ -971,6 +980,7 @@ function executePlayerAttack(merc, enemyIdx) {
         const damageDealt = target.takeDamage(dmg);
         engine.spawnFloatingText(damageDealt + (isCrit ? " Crit!" : ""), targetSprite.x, targetSprite.y - 30, isCrit ? '#f1c40f' : '#ff5252');
         addCombatLog(`⚔️ ${merc.name}이(가) ${target.name}에게 ${damageDealt} 물리 피해를 줬습니다.`, "player");
+        if (!target.isAlive()) targetSprite.setAnimation("death");
 
         afterPlayerAction(merc);
     }, 200);
@@ -995,6 +1005,7 @@ function executeWarriorSkill(merc, enemyIdx) {
         const damageDealt = target.takeDamage(dmg);
         engine.spawnFloatingText(damageDealt.toString(), targetSprite.x, targetSprite.y - 30, '#ff5252');
         addCombatLog(`🛡️ [방패 충격] ${merc.name}이(가) 방패로 ${target.name}을 강타하여 ${damageDealt} 피해를 입혔습니다!`, "player");
+        if (!target.isAlive()) targetSprite.setAnimation("death");
 
         // Stun roll
         if (Math.random() < 0.40) {
@@ -1030,6 +1041,7 @@ function executeScoutSkill(merc, enemyIdx) {
         
         engine.spawnFloatingText(damageDealt.toString(), targetSprite.x, targetSprite.y - 30, '#ff3333');
         addCombatLog(`🗡️ [급소 찌르기] ${merc.name}이(가) ${target.name}에게 방어구 관통 급소 찔러 ${damageDealt} 피해!`, "player");
+        if (!target.isAlive()) targetSprite.setAnimation("death");
 
         afterPlayerAction(merc);
     }, 200);
@@ -1058,7 +1070,8 @@ function executeMageSkill(merc) {
                 const dmg = Math.round(merc.atk * 1.3);
                 const damageDealt = es.data.takeDamage(dmg);
                 engine.spawnFloatingText(damageDealt.toString(), es.x, es.y - 30, '#e67e22');
-                engine.spawnVfx("assets/vfx_fireball.png", es.x, es.y, 120, 4, 500); // Explode vfx
+                engine.spawnVfx("assets/vfx_fireball.png", es.x, es.y, 120, 4, 500);
+                if (!es.data.isAlive()) es.setAnimation("death");
             }
         });
         addCombatLog("🔥 대폭발로 적군 전체가 화마의 격통에 휩싸입니다!", "player");
@@ -1137,6 +1150,7 @@ window.useLeaderSkill = (skill) => {
                 
                 engine.spawnFloatingText(totalDmg.toString(), targetSprite.x, targetSprite.y - 30, '#ff99ff');
                 addCombatLog(`💥 집중 공습으로 ${target.name}에게 총 ${totalDmg} 피해를 쏟았습니다!`, "player");
+                if (!target.isAlive()) targetSprite.setAnimation("death");
                 
                 checkBattleStatus();
                 updateCombatUI();

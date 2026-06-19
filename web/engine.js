@@ -183,7 +183,8 @@ class CombatSprite {
 
         this.isSelected = false;
         this.shakeTimer = 0;
-        // Fallback bob animation (when no sprite sheet)
+        this.hidden = false;          // set true after death anim completes
+        this._deathHoldMs = 0;       // ms spent on last death frame
         this._bobTime = Math.random() * Math.PI * 2;
     }
 
@@ -200,6 +201,8 @@ class CombatSprite {
     }
 
     update(dt) {
+        if (this.hidden) return;
+
         this._bobTime = (this._bobTime || 0) + dt * 0.003;
 
         this.frameTime += dt;
@@ -214,6 +217,9 @@ class CombatSprite {
                     this.setAnimation("idle");
                 } else if (this.currentAnim === "death") {
                     this.currentFrame = framesInRow - 1;
+                    // Accumulate time on last death frame, then hide
+                    this._deathHoldMs += this.frameTime;
+                    if (this._deathHoldMs > 900) this.hidden = true;
                 } else {
                     this.currentFrame = 0;
                 }
@@ -233,6 +239,8 @@ class CombatSprite {
     }
 
     draw(ctx) {
+        if (this.hidden) return;
+
         const s = Math.abs(this.scale);
         let offsetX = this.shakeTimer > 0 ? (Math.random() - 0.5) * 10 : 0;
 
